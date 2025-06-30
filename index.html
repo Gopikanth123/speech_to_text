@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Speech-to-Text</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #4f46e5;
+            --secondary-color: #7c3aed;
+            --text-color: #1f2937;
+            --bg-color: #f3f4f6;
+            --card-bg: #ffffff;
+            --border-color: #e5e7eb;
+            --success-color: #10b981;
+            --error-color: #ef4444;
+            --accent-color: #8b5cf6;
+            --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem;
+        }
+
+        .chat-container {
+            width: 100%;
+            max-width: 960px;
+            height: 90vh;
+            background: var(--card-bg);
+            border-radius: 24px;
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 2rem;
+            text-align: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .chat-header::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 10% 20%, rgba(255, 255, 255, 0.2), transparent 50%);
+            opacity: 0.3;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 2rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            background: linear-gradient(to bottom, #fafafa, #ffffff);
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 1rem 1.5rem;
+            border-radius: 16px;
+            background: var(--border-color);
+            animation: slideIn 0.4s ease-out;
+            word-break: break-word;
+            position: relative;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .user-message {
+            align-self: flex-end;
+            background: var(--primary-color);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .error-message {
+            align-self: flex-start;
+            background: var(--error-color);
+            color: white;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-time {
+            font-size: 0.8rem;
+            opacity: 0.7;
+            margin-top: 0.5rem;
+            text-align: right;
+            display: block;
+        }
+
+        .input-container {
+            padding: 1.5rem;
+            border-top: 1px solid var(--border-color);
+            background: var(--card-bg);
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        .input-area {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .text-input {
+            flex: 1;
+            padding: 0.9rem 1.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 9999px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            outline: none;
+            background: #f9fafb;
+        }
+
+        .text-input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+        }
+
+        .record-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            box-shadow: var(--shadow);
+        }
+
+        .record-btn:hover {
+            background: var(--secondary-color);
+            transform: translateY(-2px);
+        }
+
+        .record-btn.recording {
+            background: var(--error-color);
+            animation: pulse 1.5s infinite;
+        }
+
+        .record-btn:disabled {
+            background: var(--border-color);
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+            70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+
+        .status-indicator {
+            position: absolute;
+            bottom: 6px;
+            right: 6px;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--border-color);
+            border: 2px solid white;
+            transition: background 0.3s ease;
+        }
+
+        .status-indicator.active {
+            background: var(--success-color);
+        }
+
+        .waveform {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            justify-content: center;
+            height: 50px;
+            margin-bottom: 1rem;
+            opacity: 0;
+            transition: opacity 0.4s ease;
+        }
+
+        .waveform.active {
+            opacity: 1;
+        }
+
+        .wave-bar {
+            width: 6px;
+            border-radius: 6px;
+            background: var(--primary-color);
+            transition: height 0.15s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .transcript-preview {
+            margin: 0 2rem 1rem;
+            padding: 1rem;
+            background: rgba(79, 70, 229, 0.05);
+            border-left: 4px solid var(--primary-color);
+            border-radius: 8px;
+            color: var(--text-color);
+            font-size: 0.95rem;
+            line-height: 1.5;
+            display: none;
+            position: relative;
+            animation: typingFlow 0.1s ease-out;
+        }
+
+        .transcript-preview.visible {
+            display: block;
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes typingFlow {
+            from { opacity: 0.7; }
+            to { opacity: 1; }
+        }
+
+        .status-bar {
+            margin: 0 2rem 1rem;
+            padding: 0.5rem;
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: var(--text-color);
+            text-align: center;
+            display: none;
+        }
+
+        .status-bar.active {
+            display: block;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .tooltip {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1f1f1f;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            margin-bottom: 10px;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .record-btn:hover .tooltip {
+            opacity: 1;
+        }
+
+        @media (max-width: 640px) {
+            .chat-container {
+                height: 100vh;
+                border-radius: 0;
+            }
+
+            .chat-messages {
+                padding: 1.5rem;
+            }
+
+            .input-container {
+                padding: 1rem;
+            }
+
+            .record-btn {
+                width: 50px;
+                height: 50px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            Real-Time Speech-to-Text
+        </div>
+        <div class="chat-messages" id="chatMessages">
+            <div class="message user-message">
+                Start speaking or typing to begin...
+                <span class="message-time">System • Just now</span>
+            </div>
+        </div>
+        <div class="status-bar" id="statusBar">Waiting for speech input...</div>
+        <div class="transcript-preview" id="transcriptPreview"></div>
+        <div class="input-container">
+            <div class="input-area">
+                <input type="text" class="text-input" id="textInput" placeholder="Type or speak your message...">
+                <button class="record-btn" id="recordBtn" aria-label="Record audio">
+                    <i class="fas fa-microphone fa-lg"></i>
+                    <span class="status-indicator"></span>
+                    <span class="tooltip">Start Recording</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // DOM Elements
+            const chatMessages = document.getElementById('chatMessages');
+            const textInput = document.getElementById('textInput');
+            const recordBtn = document.getElementById('recordBtn');
+            const statusIndicator = document.querySelector('.status-indicator');
+            const transcriptPreview = document.getElementById('transcriptPreview');
+            const statusBar = document.getElementById('statusBar');
+
+            // Speech Recognition Setup
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            let recognition;
+            let isRecording = false;
+            let currentMessage = '';
+            let interimMessage = '';
+
+            if (SpeechRecognition) {
+                recognition = new SpeechRecognition();
+                recognition.continuous = true;
+                recognition.interimResults = true;
+                recognition.lang = 'en-US';
+                recognition.maxAlternatives = 3;
+
+                recognition.onstart = () => {
+                    isRecording = true;
+                    recordBtn.classList.add('recording');
+                    statusIndicator.classList.add('active');
+                    recordBtn.querySelector('.tooltip').textContent = 'Stop Recording';
+                    currentMessage = '';
+                    interimMessage = '';
+                    transcriptPreview.textContent = '';
+                    transcriptPreview.classList.add('visible');
+                    statusBar.textContent = 'Listening...';
+                    statusBar.classList.add('active');
+                    showWaveform(true);
+                    console.log('Speech recognition started');
+                };
+
+                recognition.onend = () => {
+                    isRecording = false;
+                    recordBtn.classList.remove('recording');
+                    statusIndicator.classList.remove('active');
+                    recordBtn.querySelector('.tooltip').textContent = 'Start Recording';
+                    statusBar.textContent = 'Waiting for speech input...';
+                    statusBar.classList.add('active');
+                    showWaveform(false);
+                    transcriptPreview.classList.remove('visible');
+                    if (currentMessage.trim()) {
+                        addMessage(currentMessage, 'user');
+                    }
+                    currentMessage = '';
+                    interimMessage = '';
+                    if (microphone) {
+                        microphone.disconnect();
+                        microphone = null;
+                    }
+                    console.log('Speech recognition stopped');
+                };
+
+                recognition.onresult = (event) => {
+                    let interimTranscript = '';
+                    let finalTranscript = '';
+
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const result = event.results[i];
+                        const transcript = result[0].transcript;
+                        const confidence = result[0].confidence;
+
+                        let bestTranscript = transcript;
+                        if (result.length > 1) {
+                            bestTranscript = Array.from(result)
+                                .reduce((best, alt) => alt.confidence > best.confidence ? alt : best)
+                                .transcript;
+                        }
+
+                        if (result.isFinal) {
+                            finalTranscript += bestTranscript + ' ';
+                        } else {
+                            interimTranscript += transcript;
+                        }
+                    }
+
+                    currentMessage += finalTranscript;
+                    interimMessage = interimTranscript;
+                    transcriptPreview.textContent = currentMessage + interimMessage;
+                    statusBar.textContent = interimTranscript ? 'Detecting speech...' : 'Listening...';
+                    console.log('Interim:', interimTranscript, 'Final:', finalTranscript, 'Current:', currentMessage);
+                };
+
+                recognition.onerror = (event) => {
+                    console.error('Speech recognition error:', event.error);
+                    isRecording = false;
+                    recordBtn.classList.remove('recording');
+                    statusIndicator.classList.remove('active');
+                    statusBar.textContent = 'Error occurred';
+                    statusBar.classList.remove('active');
+                    showWaveform(false);
+                    transcriptPreview.classList.remove('visible');
+                    currentMessage = '';
+                    interimMessage = '';
+
+                    const errorMessages = {
+                        'no-speech': 'No speech detected. Please try again.',
+                        'audio-capture': 'Microphone access failed. Please check your microphone.',
+                        'not-allowed': 'Microphone permission denied. Please enable permissions in your browser settings.',
+                        'network': 'Network error. Please check your connection.',
+                        'aborted': 'Recognition aborted. Please try again.',
+                        default: `Recognition error: ${event.error}`
+                    };
+
+                    addMessage(errorMessages[event.error] || errorMessages.default, 'error');
+                    if (microphone) {
+                        microphone.disconnect();
+                        microphone = null;
+                    }
+                };
+            } else {
+                recordBtn.disabled = true;
+                recordBtn.querySelector('.tooltip').textContent = 'Speech recognition not supported';
+                addMessage('Speech recognition is not supported in your browser. Try Chrome or Edge.', 'error');
+                statusBar.textContent = 'Speech recognition unavailable';
+                statusBar.classList.add('active');
+                console.log('SpeechRecognition not supported');
+            }
+
+            // Waveform Visualization
+            let audioContext, analyser, microphone, dataArray, animationId;
+            const waveBars = Array.from({ length: 10 }, () => {
+                const bar = document.createElement('div');
+                bar.className = 'wave-bar';
+                return bar;
+            });
+            const waveform = document.createElement('div');
+            waveform.className = 'waveform';
+            waveBars.forEach(bar => waveform.appendChild(bar));
+            transcriptPreview.parentNode.insertBefore(waveform, transcriptPreview);
+
+            async function setupAudio() {
+                try {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    microphone = audioContext.createMediaStreamSource(stream);
+                    analyser = audioContext.createAnalyser();
+                    analyser.fftSize = 128;
+                    microphone.connect(analyser);
+                    dataArray = new Uint8Array(analyser.frequencyBinCount);
+                    console.log('Audio context and microphone setup successful');
+                } catch (err) {
+                    console.error('Audio setup error:', err);
+                    addMessage('Failed to access microphone. Please check permissions and ensure a microphone is connected.', 'error');
+                    statusBar.textContent = 'Microphone access failed';
+                    statusBar.classList.add('active');
+                    recordBtn.disabled = true;
+                    recordBtn.querySelector('.tooltip').textContent = 'Microphone access failed';
+                }
+            }
+
+            function updateWaveform() {
+                if (!analyser) return;
+                analyser.getByteFrequencyData(dataArray);
+                const average = dataArray.reduce((sum, val) => sum + val, 0) / dataArray.length;
+                waveBars.forEach((bar, i) => {
+                    const height = 10 + (average / 255) * 40 * (1 + Math.sin(i * 0.4 + Date.now() * 0.002));
+                    bar.style.height = `${height}px`;
+                });
+                animationId = requestAnimationFrame(updateWaveform);
+            }
+
+            function showWaveform(show) {
+                waveform.className = `waveform${show ? ' active' : ''}`;
+                if (show && analyser) {
+                    updateWaveform();
+                } else if (animationId) {
+                    cancelAnimationFrame(animationId);
+                    animationId = null;
+                }
+            }
+
+            // Message Handling
+            function addMessage(text, type) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${type}-message`;
+                messageDiv.innerHTML = `
+                    ${text}
+                    <span class="message-time">${type === 'user' ? 'You' : 'System'} • ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                `;
+                chatMessages.appendChild(messageDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            // Event Listeners
+            recordBtn.addEventListener('click', async () => {
+                if (!recognition) {
+                    console.log('No recognition object available');
+                    return;
+                }
+                if (isRecording) {
+                    recognition.stop();
+                    console.log('Stopping recording');
+                } else {
+                    try {
+                        await setupAudio();
+                        recognition.start();
+                        console.log('Starting recording');
+                    } catch (err) {
+                        console.error('Failed to start recording:', err);
+                        addMessage('Failed to start recording. Please check your microphone and permissions.', 'error');
+                        statusBar.textContent = 'Failed to start recording';
+                        statusBar.classList.add('active');
+                        recordBtn.disabled = true;
+                    }
+                }
+            });
+
+            textInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && textInput.value.trim()) {
+                    addMessage(textInput.value, 'user');
+                    textInput.value = '';
+                }
+            });
+
+            // Initialize status bar
+            statusBar.classList.add('active');
+        });
+    </script>
+</body>
+</html>
